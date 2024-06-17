@@ -40,7 +40,9 @@ impl Receiver
         // Grab cycle.
         let cycle = u16::from_le_bytes(*datagram.first_chunk().unwrap()) as usize;
 
-        // Check for lost cycles.
+        // Check for lost cycles.  This computes the distance between packet cycle and local
+        // cycle accounting for wrapping and we assume that a sufficiently large distance
+        // means behind as opposed to way ahead.
         let mut cycle_offset = ((cycle + self.max_cycle) - self.cycle) % self.max_cycle;
         if cycle_offset > 1024
         {
@@ -68,6 +70,14 @@ impl Receiver
         for i in 0..self.window_size
         {
             let cycle_i = ((cycle + self.max_cycle) - i) % self.max_cycle;
+
+            // If we're before local cycle, early out.  This is effectively checking for distance
+            // being out of the buffer's size, which is only possible if before because we've
+            // already adanced the local cycle to catch up, if applicable.
+            if ((cycle_i + self.max_cycle) - self.cycle) % self.max_cycle > self.flags.len()
+            {
+                break;
+            }
 
             let source_index = cycle_i % self.window_size;
             let destination_index = cycle_i % self.flags.len();
