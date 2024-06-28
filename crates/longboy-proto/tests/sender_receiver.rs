@@ -15,6 +15,7 @@ struct TestSource
 struct TestSink
 {
     counter: Arc<AtomicU64>,
+    handled: Arc<AtomicU64>,
 }
 
 impl<const SIZE: usize> Source<SIZE> for TestSource
@@ -37,10 +38,11 @@ impl<const SIZE: usize> Source<SIZE> for TestSource
 
 impl<const SIZE: usize> Sink<SIZE> for TestSink
 {
-    fn handle(&mut self, input: &[u8; SIZE])
+    fn handle(&mut self, buffer: &[u8; SIZE])
     {
-        let counter = u64::from_le_bytes(*input.first_chunk().unwrap());
+        let counter = u64::from_le_bytes(*buffer.first_chunk().unwrap());
         self.counter.fetch_max(counter, Ordering::Relaxed);
+        self.handled.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -127,6 +129,7 @@ where
 
     let source_counter = Arc::new(AtomicU64::new(0));
     let sink_counter = Arc::new(AtomicU64::new(0));
+    let handled_counter = Arc::new(AtomicU64::new(0));
 
     let timestamp = 0;
 
@@ -142,6 +145,7 @@ where
         key,
         TestSink {
             counter: sink_counter.clone(),
+            handled: handled_counter.clone(),
         },
     );
 
@@ -155,12 +159,14 @@ where
         assert_eq!(receiver.cycle(), i);
         assert_eq!(source_counter.load(Ordering::Relaxed), (i as u64) + 1);
         assert_eq!(sink_counter.load(Ordering::Relaxed), i as u64);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), i as u64);
 
         receiver.handle_datagram(timestamp, &mut datagram);
         assert_eq!(sender.cycle(), i + 1);
         assert_eq!(receiver.cycle(), i + 1);
         assert_eq!(source_counter.load(Ordering::Relaxed), (i as u64) + 1);
         assert_eq!(sink_counter.load(Ordering::Relaxed), (i as u64) + 1);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), (i as u64) + 1);
     }
 }
 
@@ -173,6 +179,7 @@ where
 
     let source_counter = Arc::new(AtomicU64::new(0));
     let sink_counter = Arc::new(AtomicU64::new(0));
+    let handled_counter = Arc::new(AtomicU64::new(0));
 
     let timestamp = 0;
 
@@ -188,6 +195,7 @@ where
         key,
         TestSink {
             counter: sink_counter.clone(),
+            handled: handled_counter.clone(),
         },
     );
 
@@ -201,6 +209,7 @@ where
         assert_eq!(receiver.cycle(), i);
         assert_eq!(source_counter.load(Ordering::Relaxed), (i as u64) + 1);
         assert_eq!(sink_counter.load(Ordering::Relaxed), i as u64);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), i as u64);
 
         receiver.handle_datagram(timestamp, &mut datagram.clone());
         receiver.handle_datagram(timestamp, &mut datagram.clone());
@@ -209,6 +218,7 @@ where
         assert_eq!(receiver.cycle(), i + 1);
         assert_eq!(source_counter.load(Ordering::Relaxed), (i as u64) + 1);
         assert_eq!(sink_counter.load(Ordering::Relaxed), (i as u64) + 1);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), (i as u64) + 1);
     }
 }
 
@@ -227,6 +237,7 @@ where
 
         let source_counter = Arc::new(AtomicU64::new(0));
         let sink_counter = Arc::new(AtomicU64::new(0));
+        let handled_counter = Arc::new(AtomicU64::new(0));
 
         let timestamp = 0;
 
@@ -242,6 +253,7 @@ where
             key,
             TestSink {
                 counter: sink_counter.clone(),
+                handled: handled_counter.clone(),
             },
         );
 
@@ -253,6 +265,7 @@ where
         assert_eq!(receiver.cycle(), 0);
         assert_eq!(source_counter.load(Ordering::Relaxed), WINDOW_SIZE as u64);
         assert_eq!(sink_counter.load(Ordering::Relaxed), 0);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), 0);
 
         for datagram in datagrams.iter_mut().rev()
         {
@@ -261,6 +274,7 @@ where
             assert_eq!(receiver.cycle(), WINDOW_SIZE);
             assert_eq!(source_counter.load(Ordering::Relaxed), WINDOW_SIZE as u64);
             assert_eq!(sink_counter.load(Ordering::Relaxed), WINDOW_SIZE as u64);
+            assert_eq!(handled_counter.load(Ordering::Relaxed), WINDOW_SIZE as u64);
         }
     }
 
@@ -270,6 +284,7 @@ where
 
         let source_counter = Arc::new(AtomicU64::new(0));
         let sink_counter = Arc::new(AtomicU64::new(0));
+        let handled_counter = Arc::new(AtomicU64::new(0));
 
         let timestamp = 0;
 
@@ -285,6 +300,7 @@ where
             key,
             TestSink {
                 counter: sink_counter.clone(),
+                handled: handled_counter.clone(),
             },
         );
 
@@ -297,7 +313,9 @@ where
         assert_eq!(receiver.cycle(), 0);
         assert_eq!(source_counter.load(Ordering::Relaxed), (MAX_BUFFERED as u64));
         assert_eq!(sink_counter.load(Ordering::Relaxed), 0);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), 0);
 
+        let mut handled = WINDOW_SIZE;
         for datagram in datagrams.iter_mut().rev().take(MAX_BUFFERED - WINDOW_SIZE)
         {
             receiver.handle_datagram(timestamp, datagram);
@@ -305,6 +323,8 @@ where
             assert_eq!(receiver.cycle(), 0);
             assert_eq!(source_counter.load(Ordering::Relaxed), MAX_BUFFERED as u64);
             assert_eq!(sink_counter.load(Ordering::Relaxed), MAX_BUFFERED as u64);
+            assert_eq!(handled_counter.load(Ordering::Relaxed), handled as u64);
+            handled = std::cmp::min(handled + 1, MAX_BUFFERED);
         }
         for datagram in datagrams.iter_mut().rev().skip(MAX_BUFFERED - WINDOW_SIZE)
         {
@@ -313,6 +333,8 @@ where
             assert_eq!(receiver.cycle(), MAX_BUFFERED);
             assert_eq!(source_counter.load(Ordering::Relaxed), MAX_BUFFERED as u64);
             assert_eq!(sink_counter.load(Ordering::Relaxed), MAX_BUFFERED as u64);
+            assert_eq!(handled_counter.load(Ordering::Relaxed), handled as u64);
+            handled = std::cmp::min(handled + 1, MAX_BUFFERED);
         }
     }
 }
@@ -326,6 +348,7 @@ where
 
     let source_counter = Arc::new(AtomicU64::new(0));
     let sink_counter = Arc::new(AtomicU64::new(0));
+    let handled_counter = Arc::new(AtomicU64::new(0));
 
     let timestamp = 0;
 
@@ -341,6 +364,7 @@ where
         key,
         TestSink {
             counter: sink_counter.clone(),
+            handled: handled_counter.clone(),
         },
     );
 
@@ -361,12 +385,14 @@ where
     assert_eq!(receiver.cycle(), 0);
     assert_eq!(source_counter.load(Ordering::Relaxed), 129);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 0);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), 0);
 
     receiver.handle_datagram(timestamp, &mut datagram);
     assert_eq!(sender.cycle(), 129);
     assert_eq!(receiver.cycle(), 121);
     assert_eq!(source_counter.load(Ordering::Relaxed), 129);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 129);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), WINDOW_SIZE as u64);
 }
 
 fn cycle_wrapping<const SIZE: usize, const WINDOW_SIZE: usize>()
@@ -378,6 +404,7 @@ where
 
     let source_counter = Arc::new(AtomicU64::new(0));
     let sink_counter = Arc::new(AtomicU64::new(0));
+    let handled_counter = Arc::new(AtomicU64::new(0));
 
     let timestamp = 0;
 
@@ -393,6 +420,7 @@ where
         key,
         TestSink {
             counter: sink_counter.clone(),
+            handled: handled_counter.clone(),
         },
     );
 
@@ -408,30 +436,35 @@ where
     assert_eq!(receiver.cycle(), 65534);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65534);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65534);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), 65534);
 
     let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
     assert_eq!(sender.cycle(), 0);
     assert_eq!(receiver.cycle(), 65534);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65535);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65534);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), 65534);
 
     receiver.handle_datagram(timestamp, &mut datagram);
     assert_eq!(sender.cycle(), 0);
     assert_eq!(receiver.cycle(), 0);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65535);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65535);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), 65535);
 
     let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
     assert_eq!(sender.cycle(), 1);
     assert_eq!(receiver.cycle(), 0);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65536);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65535);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), 65535);
 
     receiver.handle_datagram(timestamp, &mut datagram);
     assert_eq!(sender.cycle(), 1);
     assert_eq!(receiver.cycle(), 1);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65536);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65536);
+    assert_eq!(handled_counter.load(Ordering::Relaxed), 65536);
 }
 
 fn sparse<const SIZE: usize, const WINDOW_SIZE: usize>()
@@ -443,6 +476,7 @@ where
 
     let source_counter = Arc::new(AtomicU64::new(0));
     let sink_counter = Arc::new(AtomicU64::new(0));
+    let handled_counter = Arc::new(AtomicU64::new(0));
 
     let period = 300;
 
@@ -460,6 +494,7 @@ where
         key,
         TestSink {
             counter: sink_counter.clone(),
+            handled: handled_counter.clone(),
         },
     );
 
@@ -478,6 +513,7 @@ where
         assert_eq!(receiver.cycle(), 0);
         assert_eq!(source_counter.load(Ordering::Relaxed), 0);
         assert_eq!(sink_counter.load(Ordering::Relaxed), 0);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), 0);
     }
 
     for i in 0..WINDOW_SIZE
@@ -490,6 +526,7 @@ where
         assert_eq!(receiver.cycle(), 1 + i);
         assert_eq!(source_counter.load(Ordering::Relaxed), 1);
         assert_eq!(sink_counter.load(Ordering::Relaxed), 1);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), 1);
     }
 
     while accumulator < ((period * 2) - 1)
@@ -502,6 +539,7 @@ where
         assert_eq!(receiver.cycle(), WINDOW_SIZE);
         assert_eq!(source_counter.load(Ordering::Relaxed), 1);
         assert_eq!(sink_counter.load(Ordering::Relaxed), 1);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), 1);
     }
 
     for i in 0..WINDOW_SIZE
@@ -510,9 +548,10 @@ where
 
         let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
         receiver.handle_datagram(timestamp, &mut datagram);
-        assert_eq!(source_counter.load(Ordering::Relaxed), 2);
-        assert_eq!(sink_counter.load(Ordering::Relaxed), 2);
         assert_eq!(sender.cycle(), WINDOW_SIZE + 1 + i);
         assert_eq!(receiver.cycle(), WINDOW_SIZE + 1 + i);
+        assert_eq!(source_counter.load(Ordering::Relaxed), 2);
+        assert_eq!(sink_counter.load(Ordering::Relaxed), 2);
+        assert_eq!(handled_counter.load(Ordering::Relaxed), 2);
     }
 }
