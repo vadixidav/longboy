@@ -1,95 +1,51 @@
-use crate::{Cipher, Sink};
+use crate::{Cipher, Constants, Sink};
 
-pub struct Receiver(Box<dyn ReceiverTrait>);
-
-trait ReceiverTrait
-{
-    fn cycle(&self) -> usize;
-    fn handle_datagram(&mut self, timestamp: u16, datagram: &mut [u8]);
-}
-
-struct ReceiverImpl<const SIZE: usize, const WINDOW_SIZE: usize>
+pub struct Receiver<SinkType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    [(); 0 - (!(SIZE * WINDOW_SIZE < 420) as usize)]:, // assert(SIZE * WINDOW_SIZE < 420)
-    [(); (std::mem::size_of::<u16>() * 2) + (SIZE * WINDOW_SIZE)]:,
-    [(); (((WINDOW_SIZE < 4) as usize) * 8) + (((WINDOW_SIZE >= 4) as usize) * WINDOW_SIZE * 2)]:, // std::cmp::max(8, 2 * WINDOW_SIZE)
+    SinkType: Sink,
+    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+    [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
 {
+    sink: SinkType,
     cipher: Cipher<SIZE>,
-    sink: Box<dyn Sink>,
 
     cycle: usize,
-    flags: [bool; (((WINDOW_SIZE < 4) as usize) * 8) + (((WINDOW_SIZE >= 4) as usize) * WINDOW_SIZE * 2)],
+    flags: [bool; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED],
 }
 
-impl Receiver
+impl<SinkType, const SIZE: usize, const WINDOW_SIZE: usize> Receiver<SinkType, SIZE, WINDOW_SIZE>
+where
+    SinkType: Sink,
+    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+    [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
 {
-    pub fn new(size: usize, window_size: usize, key: u64, sink: Box<dyn Sink>) -> Self
+    pub fn new(cipher_key: u64, sink: SinkType) -> Self
     {
-        match (size, window_size)
-        {
-            (8, 1) => Self(Box::new(ReceiverImpl::<8, 1>::new(key, sink))),
-            (8, 3) => Self(Box::new(ReceiverImpl::<8, 3>::new(key, sink))),
-            (16, 1) => Self(Box::new(ReceiverImpl::<16, 1>::new(key, sink))),
-            (16, 3) => Self(Box::new(ReceiverImpl::<16, 3>::new(key, sink))),
-            (32, 1) => Self(Box::new(ReceiverImpl::<32, 1>::new(key, sink))),
-            (32, 3) => Self(Box::new(ReceiverImpl::<32, 3>::new(key, sink))),
-            (64, 1) => Self(Box::new(ReceiverImpl::<64, 1>::new(key, sink))),
-            (64, 3) => Self(Box::new(ReceiverImpl::<64, 3>::new(key, sink))),
-            (128, 1) => Self(Box::new(ReceiverImpl::<128, 1>::new(key, sink))),
-            (128, 3) => Self(Box::new(ReceiverImpl::<128, 3>::new(key, sink))),
-            _ => panic!("Unsupported (size, window_size) tuple"),
+        Self {
+            sink: sink,
+            cipher: Cipher::new(cipher_key),
+
+            cycle: 0,
+            flags: [false; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED],
         }
     }
 
     pub fn cycle(&self) -> usize
     {
-        self.0.cycle()
-    }
-
-    pub fn handle_datagram(&mut self, timestamp: u16, datagram: &mut [u8])
-    {
-        self.0.handle_datagram(timestamp, datagram)
-    }
-}
-
-impl<const SIZE: usize, const WINDOW_SIZE: usize> ReceiverImpl<SIZE, WINDOW_SIZE>
-where
-    [(); 0 - (!(SIZE * WINDOW_SIZE < 420) as usize)]:,
-    [(); (std::mem::size_of::<u16>() * 2) + (SIZE * WINDOW_SIZE)]:,
-    [(); (((WINDOW_SIZE < 4) as usize) * 8) + (((WINDOW_SIZE >= 4) as usize) * WINDOW_SIZE * 2)]:,
-{
-    const MAX_CYCLE: usize = ((u16::MAX as usize) / WINDOW_SIZE) * WINDOW_SIZE;
-
-    pub fn new(key: u64, sink: Box<dyn Sink>) -> Self
-    {
-        Self {
-            cipher: Cipher::new(key),
-            sink: sink,
-
-            cycle: 0,
-            flags: [false; (((WINDOW_SIZE < 4) as usize) * 8) + (((WINDOW_SIZE >= 4) as usize) * WINDOW_SIZE * 2)],
-        }
-    }
-}
-
-impl<const SIZE: usize, const WINDOW_SIZE: usize> ReceiverTrait for ReceiverImpl<SIZE, WINDOW_SIZE>
-where
-    [(); 0 - (!(SIZE * WINDOW_SIZE < 420) as usize)]:,
-    [(); (std::mem::size_of::<u16>() * 2) + (SIZE * WINDOW_SIZE)]:,
-    [(); (((WINDOW_SIZE < 4) as usize) * 8) + (((WINDOW_SIZE >= 4) as usize) * WINDOW_SIZE * 2)]:,
-{
-    fn cycle(&self) -> usize
-    {
         self.cycle
     }
 
-    fn handle_datagram(&mut self, timestamp: u16, datagram: &mut [u8])
+    pub fn handle_datagram(
+        &mut self,
+        timestamp: u16,
+        datagram: &mut [u8; <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE],
+    )
     {
-        let datagram: &mut [u8; (std::mem::size_of::<u16>() * 2) + (SIZE * WINDOW_SIZE)] = match datagram.try_into()
-        {
-            Ok(datagram) => datagram,
-            Err(_) => return,
-        };
+        // Alias constants so they're less painful to read.
+        #[allow(non_snake_case)]
+        let MAX_CYCLE: usize = Constants::<SIZE, WINDOW_SIZE>::MAX_CYCLE;
+        #[allow(non_snake_case)]
+        let MAX_BUFFERED: usize = Constants::<SIZE, WINDOW_SIZE>::MAX_BUFFERED;
 
         // Grab cycle and timestamp.
         self.cipher
@@ -98,7 +54,7 @@ where
         let datagram_timestamp = u16::from_le_bytes(*<&[u8; 2]>::try_from(&datagram[2..4]).unwrap());
 
         // Calculate diff for cycle and timestamp.
-        let cycle_diff = ((datagram_cycle + Self::MAX_CYCLE) - self.cycle) % Self::MAX_CYCLE;
+        let cycle_diff = ((datagram_cycle + MAX_CYCLE) - self.cycle) % MAX_CYCLE;
         let timestamp_diff = ((datagram_timestamp + u16::MAX) - timestamp) % u16::MAX;
 
         // Check for bad datagrams or late datagrams that are already processed.  Because
@@ -116,33 +72,33 @@ where
         {
             // soft warning
         }
-        if cycle_diff > self.flags.len()
+        if cycle_diff > MAX_BUFFERED
         {
             // hard warning
 
-            for _ in 0..(cycle_diff - self.flags.len())
+            for _ in 0..(cycle_diff - MAX_BUFFERED)
             {
-                let index = self.cycle % self.flags.len();
+                let index = self.cycle % MAX_BUFFERED;
                 self.flags[index] = false;
-                self.cycle = (self.cycle + 1) % Self::MAX_CYCLE;
+                self.cycle = (self.cycle + 1) % MAX_CYCLE;
             }
         }
 
         // Sink input.
         for i in 0..WINDOW_SIZE
         {
-            let cycle_i = ((datagram_cycle + Self::MAX_CYCLE) - i) % Self::MAX_CYCLE;
+            let cycle_i = ((datagram_cycle + MAX_CYCLE) - i) % MAX_CYCLE;
 
             // If we're before local cycle, early out.  This is effectively checking for distance
             // being out of the buffer's size, which is only possible if before because we've
             // already adanced the local cycle to catch up, if applicable.
-            if ((cycle_i + Self::MAX_CYCLE) - self.cycle) % Self::MAX_CYCLE > self.flags.len()
+            if ((cycle_i + MAX_CYCLE) - self.cycle) % MAX_CYCLE > MAX_BUFFERED
             {
                 break;
             }
 
             let source_index = cycle_i % WINDOW_SIZE;
-            let destination_index = cycle_i % self.flags.len();
+            let destination_index = cycle_i % MAX_BUFFERED;
 
             if !self.flags[destination_index]
             {
@@ -158,13 +114,13 @@ where
         // Advance cycles.
         loop
         {
-            let index = self.cycle % self.flags.len();
+            let index = self.cycle % MAX_BUFFERED;
             if !self.flags[index]
             {
                 break;
             }
             self.flags[index] = false;
-            self.cycle = (self.cycle + 1) % Self::MAX_CYCLE;
+            self.cycle = (self.cycle + 1) % MAX_CYCLE;
         }
     }
 }

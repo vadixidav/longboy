@@ -4,6 +4,9 @@
 #![feature(slice_as_chunks)]
 
 // API
+mod constants;
+pub use self::constants::*;
+
 mod sender;
 pub use self::sender::*;
 
