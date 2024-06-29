@@ -10,12 +10,6 @@ pub use self::constants::*;
 mod sender;
 pub use self::sender::*;
 
-mod sink;
-pub use self::sink::*;
-
-mod source;
-pub use self::source::*;
-
 mod receiver;
 pub use self::receiver::*;
 

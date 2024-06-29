@@ -17,9 +17,9 @@ struct TestSink
     counter: Arc<AtomicU64>,
 }
 
-impl Source for TestSource
+impl<const SIZE: usize> Source<SIZE> for TestSource
 {
-    fn poll(&mut self, buffer: &mut [u8]) -> bool
+    fn poll(&mut self, buffer: &mut [u8; SIZE]) -> bool
     {
         self.accumulator += 1;
         match self.accumulator % self.period == 0
@@ -35,9 +35,9 @@ impl Source for TestSource
     }
 }
 
-impl Sink for TestSink
+impl<const SIZE: usize> Sink<SIZE> for TestSink
 {
-    fn handle(&mut self, input: &[u8])
+    fn handle(&mut self, input: &[u8; SIZE])
     {
         let counter = u64::from_le_bytes(*input.first_chunk().unwrap());
         self.counter.fetch_max(counter, Ordering::Relaxed);

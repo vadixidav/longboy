@@ -1,8 +1,8 @@
-use crate::{Cipher, Constants, Source};
+use crate::{Cipher, Constants};
 
 pub struct Sender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SourceType: Source,
+    SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     source: SourceType,
@@ -13,9 +13,14 @@ where
     buffer: [u8; <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE],
 }
 
+pub trait Source<const SIZE: usize>
+{
+    fn poll(&mut self, buffer: &mut [u8; SIZE]) -> bool;
+}
+
 impl<SourceType, const SIZE: usize, const WINDOW_SIZE: usize> Sender<SourceType, SIZE, WINDOW_SIZE>
 where
-    SourceType: Source,
+    SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     pub fn new(cipher_key: u64, source: SourceType) -> Self
@@ -51,7 +56,9 @@ where
         let index = self.cycle % WINDOW_SIZE;
         let start = (std::mem::size_of::<u16>() * 2) + (SIZE * index);
         let end = start + SIZE;
-        match self.source.poll(&mut self.buffer[start..end])
+        match self
+            .source
+            .poll(<&mut [u8; SIZE]>::try_from(&mut self.buffer[start..end]).unwrap())
         {
             true =>
             {

@@ -1,8 +1,8 @@
-use crate::{Cipher, Constants, Sink};
+use crate::{Cipher, Constants};
 
 pub struct Receiver<SinkType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SinkType: Sink,
+    SinkType: Sink<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
     [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
 {
@@ -13,9 +13,14 @@ where
     flags: [bool; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED],
 }
 
+pub trait Sink<const SIZE: usize>
+{
+    fn handle(&mut self, input: &[u8; SIZE]);
+}
+
 impl<SinkType, const SIZE: usize, const WINDOW_SIZE: usize> Receiver<SinkType, SIZE, WINDOW_SIZE>
 where
-    SinkType: Sink,
+    SinkType: Sink<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
     [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
 {
@@ -106,7 +111,8 @@ where
                 let end = start + SIZE;
                 self.cipher
                     .decrypt_slot(<&mut [u8; SIZE]>::try_from(&mut datagram[start..end]).unwrap());
-                self.sink.handle(&datagram[start..end]);
+                self.sink
+                    .handle(<&[u8; SIZE]>::try_from(&datagram[start..end]).unwrap());
                 self.flags[destination_index] = true;
             }
         }
