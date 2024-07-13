@@ -14,8 +14,10 @@ where
 }
 
 pub trait Sink<const SIZE: usize>
+where
+    Self: 'static + Send,
 {
-    fn handle(&mut self, input: &[u8; SIZE]);
+    fn handle(&mut self, buffer: &[u8; SIZE]);
 }
 
 impl<SinkType, const SIZE: usize, const WINDOW_SIZE: usize> Receiver<SinkType, SIZE, WINDOW_SIZE>
@@ -109,10 +111,13 @@ where
             {
                 let start = (std::mem::size_of::<u16>() * 2) + (SIZE * source_index);
                 let end = start + SIZE;
-                self.cipher
-                    .decrypt_slot(<&mut [u8; SIZE]>::try_from(&mut datagram[start..end]).unwrap());
-                self.sink
-                    .handle(<&[u8; SIZE]>::try_from(&datagram[start..end]).unwrap());
+                if *<&[u8; SIZE]>::try_from(&datagram[start..end]).unwrap() != [0; SIZE]
+                {
+                    self.cipher
+                        .decrypt_slot(<&mut [u8; SIZE]>::try_from(&mut datagram[start..end]).unwrap());
+                    self.sink
+                        .handle(<&[u8; SIZE]>::try_from(&datagram[start..end]).unwrap());
+                }
                 self.flags[destination_index] = true;
             }
         }

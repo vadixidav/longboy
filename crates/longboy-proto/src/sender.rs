@@ -14,6 +14,8 @@ where
 }
 
 pub trait Source<const SIZE: usize>
+where
+    Self: 'static + Send,
 {
     fn poll(&mut self, buffer: &mut [u8; SIZE]) -> bool;
 }
