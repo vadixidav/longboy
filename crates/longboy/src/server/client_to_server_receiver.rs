@@ -4,10 +4,9 @@ use anyhow::Result;
 use enum_map::{Enum, EnumMap};
 use flume::Receiver as FlumeReceiver;
 use fnv::FnvHashMap;
-use longboy_proto::{Constants, Receiver, Sink};
 use thunderdome::{Arena, Index};
 
-use crate::{Factory, Mirroring, RuntimeTask, SessionEvent};
+use crate::{Constants, Factory, Mirroring, Receiver, RuntimeTask, SessionEvent, Sink};
 
 pub(crate) struct ClientToServerReceiver<SinkFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
 where

@@ -6,9 +6,7 @@ use flume::Receiver as FlumeReceiver;
 use fnv::FnvHashMap;
 use thunderdome::{Arena, Index};
 
-use longboy_proto::{Constants, Sender, Source};
-
-use crate::{Factory, Mirroring, RuntimeTask, SessionEvent, UdpSocketExt};
+use crate::{Constants, Factory, Mirroring, RuntimeTask, Sender, SessionEvent, Source, UdpSocketExt};
 
 pub(crate) struct ServerToClientSender<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
 where

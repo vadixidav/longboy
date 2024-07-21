@@ -3,9 +3,7 @@ use std::net::{SocketAddr, UdpSocket};
 use anyhow::Result;
 use enum_map::{Enum, EnumMap};
 
-use longboy_proto::{Constants, Sender, Source};
-
-use crate::{udp_socket_ext::UdpSocketExt, Mirroring, RuntimeTask};
+use crate::{Constants, Mirroring, RuntimeTask, Sender, Source, UdpSocketExt};
 
 pub(crate) struct ClientToServerSender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
 where

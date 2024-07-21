@@ -1,8 +1,3 @@
-#![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
-#![feature(new_uninit)]
-#![feature(slice_as_chunks)]
-
 // API
 mod constants;
 pub use self::constants::*;

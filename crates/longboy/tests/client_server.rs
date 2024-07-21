@@ -9,8 +9,8 @@ use parking_lot::Mutex;
 
 use longboy::{
     Client, ClientToServerSchema, Factory, Mirroring, Runtime, RuntimeTask, Server, ServerToClientSchema, Session,
+    Sink, Source,
 };
-use longboy_proto::{Sink, Source};
 
 #[derive(Clone)]
 struct TestSession
