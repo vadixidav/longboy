@@ -5,11 +5,9 @@ use enum_map::{enum_map, EnumMap};
 use flume::Sender as FlumeSender;
 use fnv::{FnvHashMap, FnvHashSet};
 
-use longboy_proto::{Constants, Sink, Source};
-
 use crate::{
-    ClientToServerReceiver, ClientToServerSchema, Factory, Mirroring, Runtime, RuntimeTask, ServerToClientSchema,
-    ServerToClientSender, Session, SessionEvent,
+    ClientToServerReceiver, ClientToServerSchema, Constants, Factory, Mirroring, Runtime, RuntimeTask,
+    ServerToClientSchema, ServerToClientSender, Session, SessionEvent, Sink, Source,
 };
 
 pub struct Server

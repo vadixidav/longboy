@@ -4,6 +4,8 @@
 #![feature(iter_chain)]
 #![feature(let_chains)]
 #![feature(map_try_insert)]
+#![feature(new_uninit)]
+#![feature(slice_as_chunks)]
 #![feature(try_blocks)]
 
 // API
@@ -12,6 +14,9 @@ pub use self::client::*;
 
 mod mirroring;
 pub use self::mirroring::*;
+
+mod proto;
+pub use self::proto::*;
 
 mod runtime;
 pub use self::runtime::*;

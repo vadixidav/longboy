@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use longboy_proto::{Constants, Receiver, Sender, Sink, Source};
+use longboy::{Constants, Receiver, Sender, Sink, Source};
 
 struct TestSource
 {

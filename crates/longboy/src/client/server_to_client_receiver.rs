@@ -1,9 +1,8 @@
 use std::net::{SocketAddr, UdpSocket};
 
 use anyhow::Result;
-use longboy_proto::{Constants, Receiver, Sink};
 
-use crate::RuntimeTask;
+use crate::{Constants, Receiver, RuntimeTask, Sink};
 
 pub(crate) struct ServerToClientReceiver<SinkType, const SIZE: usize, const WINDOW_SIZE: usize>
 where

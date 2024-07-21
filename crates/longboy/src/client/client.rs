@@ -4,11 +4,9 @@ use anyhow::{anyhow, Context, Result};
 use enum_map::{enum_map, EnumMap};
 use fnv::FnvHashSet;
 
-use longboy_proto::{Constants, Sink, Source};
-
 use crate::{
-    ClientToServerSchema, ClientToServerSender, Mirroring, Runtime, RuntimeTask, ServerToClientReceiver,
-    ServerToClientSchema, Session,
+    ClientToServerSchema, ClientToServerSender, Constants, Mirroring, Runtime, RuntimeTask, ServerToClientReceiver,
+    ServerToClientSchema, Session, Sink, Source,
 };
 
 pub struct Client
