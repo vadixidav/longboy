@@ -1,6 +1,6 @@
 use cipher::{
     array::Array,
-    typenum::{U20, U4, U8},
+    typenum::{U20, U8},
     BlockCipherDecrypt, BlockCipherEncrypt,
 };
 use rc5::RC5;
