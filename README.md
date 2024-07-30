@@ -1,9 +1,10 @@
 # longboy
 
-![BSD 3-clause license][li] ![ci][bci]
+[![BSD 3-clause license][li]][ll] ![ci][bci]
 
-[li]: <https://img.shields.io/badge/License-BSD_3--Clause-blue.svg>)](<https://opensource.org/licenses/BSD-3-Clause>
-[bci]: <https://github.com/JKurzer/longboy/workflows/ci/badge.svg>
+[li]: https://img.shields.io/badge/License-BSD_3--Clause-blue.svg
+[ll]: https://opensource.org/licenses/BSD-3-Clause
+[bci]: https://github.com/JKurzer/longboy/workflows/ci/badge.svg
 
 Longboy is a planned rust implementation of the Bristlecone server protocols with a focus on speed, accuracy, and reliability.
 
