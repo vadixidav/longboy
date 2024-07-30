@@ -1,33 +1,31 @@
 use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
     thread::{Builder, JoinHandle},
     time::{Duration, Instant},
 };
+
+use tokio_util::sync::CancellationToken;
 
 use crate::{Runtime, RuntimeTask};
 
 pub struct ThreadRuntime
 {
     handles: Vec<JoinHandle<()>>,
-    cancelled: Arc<AtomicBool>,
+    cancellation_token: CancellationToken,
 }
 
 struct Task
 {
     task: Box<dyn RuntimeTask>,
-    cancelled: Arc<AtomicBool>,
+    cancellation_token: CancellationToken,
 }
 
 impl ThreadRuntime
 {
-    pub fn new(cancelled: Arc<AtomicBool>) -> Self
+    pub fn new(cancellation_token: CancellationToken) -> Self
     {
         Self {
             handles: Vec::new(),
-            cancelled: cancelled,
+            cancellation_token: cancellation_token,
         }
     }
 }
@@ -36,7 +34,7 @@ impl Runtime for ThreadRuntime
 {
     fn running(&self) -> bool
     {
-        !self.cancelled.load(Ordering::Relaxed)
+        !self.cancellation_token.is_cancelled()
     }
 
     fn spawn(&mut self, task: Box<dyn RuntimeTask>)
@@ -44,7 +42,7 @@ impl Runtime for ThreadRuntime
         let name = String::from(task.name());
         let task = Task {
             task: task,
-            cancelled: self.cancelled.clone(),
+            cancellation_token: self.cancellation_token.clone(),
         };
         self.handles
             .push(Builder::new().name(name).spawn(move || task.run()).unwrap());
@@ -55,7 +53,7 @@ impl Drop for ThreadRuntime
 {
     fn drop(&mut self)
     {
-        self.cancelled.store(false, Ordering::Relaxed);
+        self.cancellation_token.cancel();
         for handle in self.handles.drain(..).rev()
         {
             handle.join().unwrap();
@@ -68,12 +66,12 @@ impl Task
     fn run(mut self)
     {
         let instant = Instant::now();
-        while !self.cancelled.load(Ordering::Relaxed)
+        while !self.cancellation_token.is_cancelled()
         {
             self.task.poll(instant.elapsed().as_millis() as u16);
             std::thread::sleep(Duration::from_millis(1));
         }
 
-        self.cancelled.store(false, Ordering::Relaxed);
+        self.cancellation_token.cancel();
     }
 }

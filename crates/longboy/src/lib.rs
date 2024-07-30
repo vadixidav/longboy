@@ -21,17 +21,14 @@ pub use self::proto::*;
 mod runtime;
 pub use self::runtime::*;
 
+mod runtimes;
+pub use self::runtimes::*;
+
 mod schema;
 pub use self::schema::*;
 
 mod server;
 pub use self::server::*;
-
-mod session;
-pub use self::session::*;
-
-mod thread_runtime;
-pub use self::thread_runtime::*;
 
 // Internal
 mod udp_socket_ext;
