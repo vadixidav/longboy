@@ -27,7 +27,7 @@ where
     pub fn new(cipher_key: u64, source: SourceType) -> Self
     {
         Self {
-            source: source,
+            source,
             cipher: Cipher::new(cipher_key),
 
             cycle: 0,
