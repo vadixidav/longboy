@@ -29,9 +29,8 @@ impl Client
     pub fn builder(session: ClientSession, runtime: Box<dyn Runtime>) -> ClientBuilder
     {
         ClientBuilder {
-            session: session,
-            runtime: runtime,
-
+            session,
+            runtime,
             ports: FnvHashSet::default(),
             tasks: Vec::new(),
         }

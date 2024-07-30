@@ -20,9 +20,9 @@ impl ServerSession
         send.stopped().await?;
 
         Ok(Self {
-            connection: connection,
-            session_id: session_id,
-            cipher_key: cipher_key,
+            connection,
+            session_id,
+            cipher_key,
         })
     }
 

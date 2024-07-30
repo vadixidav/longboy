@@ -32,8 +32,8 @@ impl Server
     pub fn builder(session_capacity: usize, runtime: Box<dyn Runtime>) -> ServerBuilder
     {
         ServerBuilder {
-            session_capacity: session_capacity,
-            runtime: runtime,
+            session_capacity,
+            runtime,
 
             ports: FnvHashSet::default(),
             tasks: Vec::new(),
@@ -51,10 +51,7 @@ impl Server
         self.sessions.insert(session_id, session);
         self.session_senders.iter().for_each(|session_sender| {
             session_sender
-                .send(ServerSessionEvent::Connected {
-                    session_id: session_id,
-                    cipher_key: cipher_key,
-                })
+                .send(ServerSessionEvent::Connected { session_id, cipher_key })
                 .unwrap()
         });
     }
