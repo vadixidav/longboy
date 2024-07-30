@@ -4,6 +4,7 @@ use tokio::io::AsyncWriteExt;
 
 pub struct ServerSession
 {
+    #[allow(unused)]
     connection: Connection,
     session_id: u64,
     cipher_key: u64,

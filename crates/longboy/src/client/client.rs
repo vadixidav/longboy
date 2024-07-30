@@ -11,7 +11,9 @@ use crate::{
 
 pub struct Client
 {
+    #[allow(unused)]
     session: ClientSession,
+    #[allow(unused)]
     runtime: Box<dyn Runtime>,
 }
 

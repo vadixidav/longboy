@@ -14,6 +14,7 @@ pub struct Server
 {
     sessions: FnvHashMap<u64, ServerSession>,
     session_senders: Box<[FlumeSender<ServerSessionEvent>]>,
+    #[allow(unused)]
     runtime: Box<dyn Runtime>,
 }
 
