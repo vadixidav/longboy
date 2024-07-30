@@ -154,7 +154,7 @@ where
 
     for i in 0..1024
     {
-        let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone().clone());
+        let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
         assert_eq!(sender.cycle(), i + 1);
         assert_eq!(receiver.cycle(), i);
         assert_eq!(source_counter.load(Ordering::Relaxed), (i as u64) + 1);
@@ -204,7 +204,7 @@ where
 
     for i in 0..1024
     {
-        let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+        let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
         assert_eq!(sender.cycle(), i + 1);
         assert_eq!(receiver.cycle(), i);
         assert_eq!(source_counter.load(Ordering::Relaxed), (i as u64) + 1);
@@ -260,7 +260,7 @@ where
         assert_eq!(sender.cycle(), 0);
         assert_eq!(receiver.cycle(), 0);
 
-        let mut datagrams = [0; WINDOW_SIZE].map(|_| Box::new(sender.poll_datagram(timestamp).unwrap().clone()));
+        let mut datagrams = [0; WINDOW_SIZE].map(|_| Box::new(*sender.poll_datagram(timestamp).unwrap()));
         assert_eq!(sender.cycle(), WINDOW_SIZE);
         assert_eq!(receiver.cycle(), 0);
         assert_eq!(source_counter.load(Ordering::Relaxed), WINDOW_SIZE as u64);
@@ -308,7 +308,7 @@ where
         assert_eq!(receiver.cycle(), 0);
 
         let mut datagrams = [0; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]
-            .map(|_| Box::new(sender.poll_datagram(timestamp).unwrap().clone()));
+            .map(|_| Box::new(*sender.poll_datagram(timestamp).unwrap()));
         assert_eq!(sender.cycle(), MAX_BUFFERED);
         assert_eq!(receiver.cycle(), 0);
         assert_eq!(source_counter.load(Ordering::Relaxed), (MAX_BUFFERED as u64));
@@ -380,7 +380,7 @@ where
     assert_eq!(source_counter.load(Ordering::Relaxed), 128);
     assert_eq!(sink_counter.load(Ordering::Relaxed), 0);
 
-    let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+    let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
     assert_eq!(sender.cycle(), 129);
     assert_eq!(receiver.cycle(), 0);
     assert_eq!(source_counter.load(Ordering::Relaxed), 129);
@@ -429,7 +429,7 @@ where
 
     for _ in 0..(65535 - 1)
     {
-        let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+        let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
         receiver.handle_datagram(timestamp, &mut datagram);
     }
     assert_eq!(sender.cycle(), 65534);
@@ -438,7 +438,7 @@ where
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65534);
     assert_eq!(handled_counter.load(Ordering::Relaxed), 65534);
 
-    let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+    let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
     assert_eq!(sender.cycle(), 0);
     assert_eq!(receiver.cycle(), 65534);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65535);
@@ -452,7 +452,7 @@ where
     assert_eq!(sink_counter.load(Ordering::Relaxed), 65535);
     assert_eq!(handled_counter.load(Ordering::Relaxed), 65535);
 
-    let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+    let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
     assert_eq!(sender.cycle(), 1);
     assert_eq!(receiver.cycle(), 0);
     assert_eq!(source_counter.load(Ordering::Relaxed), 65536);
@@ -487,7 +487,7 @@ where
         TestSource {
             counter: source_counter.clone(),
             accumulator: 0,
-            period: period,
+            period,
         },
     );
     let mut receiver: Receiver<TestSink, SIZE, WINDOW_SIZE> = Receiver::new(
@@ -520,7 +520,7 @@ where
     {
         accumulator += 1;
 
-        let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+        let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
         receiver.handle_datagram(timestamp, &mut datagram);
         assert_eq!(sender.cycle(), 1 + i);
         assert_eq!(receiver.cycle(), 1 + i);
@@ -546,7 +546,7 @@ where
     {
         accumulator += 1;
 
-        let mut datagram = Box::new(sender.poll_datagram(timestamp).unwrap().clone());
+        let mut datagram = Box::new(*sender.poll_datagram(timestamp).unwrap());
         receiver.handle_datagram(timestamp, &mut datagram);
         assert_eq!(sender.cycle(), WINDOW_SIZE + 1 + i);
         assert_eq!(receiver.cycle(), WINDOW_SIZE + 1 + i);
