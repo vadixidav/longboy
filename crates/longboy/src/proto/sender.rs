@@ -73,7 +73,6 @@ where
                 self.flags[index] = false;
             }
         }
-        let _flag_set = !self.flags[index];
 
         // Check for transmit and potentially advance cycle.
         match self.flags.iter().any(|flag| *flag)
