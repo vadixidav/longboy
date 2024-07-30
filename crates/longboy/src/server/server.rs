@@ -63,7 +63,7 @@ impl Server
 
         self.session_senders.iter().for_each(|session_sender| {
             session_sender
-                .send(ServerSessionEvent::Disconnected { session_id: session_id })
+                .send(ServerSessionEvent::Disconnected { session_id })
                 .unwrap()
         });
         self.sessions.remove(&session_id);

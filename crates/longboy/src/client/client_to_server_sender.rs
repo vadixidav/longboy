@@ -7,7 +7,6 @@ use crate::{Constants, Mirroring, RuntimeTask, Sender, Source, UdpSocketExt};
 
 pub(crate) struct ClientToServerSender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     name: String,
@@ -28,6 +27,7 @@ where
     SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         name: String,
         mapper_socket_addr: SocketAddr,

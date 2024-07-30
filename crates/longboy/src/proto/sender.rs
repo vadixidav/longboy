@@ -2,7 +2,6 @@ use crate::{Cipher, Constants};
 
 pub struct Sender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     source: SourceType,
@@ -75,7 +74,9 @@ where
             }
         }
         if !self.flags[index]
-        {}
+        {
+            todo!();
+        }
 
         // Check for transmit and potentially advance cycle.
         match self.flags.iter().any(|flag| *flag)
