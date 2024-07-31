@@ -58,20 +58,20 @@ where
         socket.set_nonblocking(true)?;
 
         Ok(Self {
-            name: name,
+            name,
 
-            mapper_socket: mapper_socket,
+            mapper_socket,
 
-            socket: socket,
+            socket,
 
-            session_receiver: session_receiver,
+            session_receiver,
             sessions: Arena::with_capacity(session_capacity),
             session_id_to_session_map: FnvHashMap::with_capacity_and_hasher(session_capacity, Default::default()),
             socket_addr_to_session_map: FnvHashMap::with_capacity_and_hasher(
                 session_capacity * Mirroring::LENGTH,
                 Default::default(),
             ),
-            sink_factory: sink_factory,
+            sink_factory,
         })
     }
 }

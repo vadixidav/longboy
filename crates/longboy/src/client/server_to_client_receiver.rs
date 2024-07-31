@@ -41,14 +41,14 @@ where
         socket.set_nonblocking(true)?;
 
         Ok(Self {
-            name: name,
+            name,
 
-            mapper_socket_addr: mapper_socket_addr,
-            heartbeat_period: heartbeat_period,
+            mapper_socket_addr,
+            heartbeat_period,
 
-            socket: socket,
+            socket,
 
-            session_id: session_id,
+            session_id,
             next_heartbeat: 0,
             receiver: Receiver::new(cipher_key, sink),
         })

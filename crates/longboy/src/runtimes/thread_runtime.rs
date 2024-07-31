@@ -25,7 +25,7 @@ impl ThreadRuntime
     {
         Self {
             handles: Vec::new(),
-            cancellation_token: cancellation_token,
+            cancellation_token,
         }
     }
 }
@@ -41,7 +41,7 @@ impl Runtime for ThreadRuntime
     {
         let name = String::from(task.name());
         let task = Task {
-            task: task,
+            task,
             cancellation_token: self.cancellation_token.clone(),
         };
         self.handles

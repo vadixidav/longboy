@@ -4,6 +4,7 @@ use tokio::io::AsyncWriteExt;
 
 pub struct ServerSession
 {
+    #[allow(unused)]
     connection: Connection,
     session_id: u64,
     cipher_key: u64,
@@ -20,9 +21,9 @@ impl ServerSession
         send.stopped().await?;
 
         Ok(Self {
-            connection: connection,
-            session_id: session_id,
-            cipher_key: cipher_key,
+            connection,
+            session_id,
+            cipher_key,
         })
     }
 

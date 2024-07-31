@@ -2,7 +2,6 @@ use crate::{Cipher, Constants};
 
 pub struct Sender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     source: SourceType,
@@ -28,7 +27,7 @@ where
     pub fn new(cipher_key: u64, source: SourceType) -> Self
     {
         Self {
-            source: source,
+            source,
             cipher: Cipher::new(cipher_key),
 
             cycle: 0,
@@ -74,8 +73,6 @@ where
                 self.flags[index] = false;
             }
         }
-        if !self.flags[index]
-        {}
 
         // Check for transmit and potentially advance cycle.
         match self.flags.iter().any(|flag| *flag)

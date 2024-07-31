@@ -7,7 +7,6 @@ use crate::{Constants, Mirroring, RuntimeTask, Sender, Source, UdpSocketExt};
 
 pub(crate) struct ClientToServerSender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     name: String,
@@ -28,6 +27,7 @@ where
     SourceType: Source<SIZE>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         name: String,
         mapper_socket_addr: SocketAddr,
@@ -49,15 +49,15 @@ where
         sockets[Mirroring::Voice].set_qos_voice()?;
 
         Ok(Self {
-            name: name,
+            name,
 
-            mapper_socket_addr: mapper_socket_addr,
-            heartbeat_period: heartbeat_period,
-            socket_addr: socket_addr,
+            mapper_socket_addr,
+            heartbeat_period,
+            socket_addr,
 
-            sockets: sockets,
+            sockets,
 
-            session_id: session_id,
+            session_id,
             next_heartbeat: 0,
             sender: Sender::new(cipher_key, source),
         })

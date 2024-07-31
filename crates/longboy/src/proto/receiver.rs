@@ -29,7 +29,7 @@ where
     pub fn new(cipher_key: u64, sink: SinkType) -> Self
     {
         Self {
-            sink: sink,
+            sink,
             cipher: Cipher::new(cipher_key),
 
             cycle: 0,

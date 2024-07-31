@@ -72,7 +72,7 @@ impl TestRuntime
     {
         Self {
             inner: Arc::new(Mutex::new(TestRuntimeInner {
-                tick_period: tick_period,
+                tick_period,
 
                 timestamp: 0,
                 tasks: Vec::new(),
@@ -136,7 +136,7 @@ impl Factory for TestClientToServerSinkFactory
         };
 
         TestClientToServerSink {
-            player_index: player_index,
+            player_index,
             channel: self.channel.clone(),
         }
     }

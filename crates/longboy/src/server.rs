@@ -1,19 +1,27 @@
-use std::net::{SocketAddr, UdpSocket};
+mod client_to_server_receiver;
+mod factory;
+mod server_session;
+mod server_session_event;
+mod server_to_client_sender;
 
+// API
+pub use self::{factory::*, server_session::*};
+
+// Internal
+pub(crate) use self::{client_to_server_receiver::*, server_session_event::*, server_to_client_sender::*};
+
+use crate::{ClientToServerSchema, Constants, Mirroring, Runtime, RuntimeTask, ServerToClientSchema, Sink, Source};
 use anyhow::{anyhow, Context, Result};
 use enum_map::{enum_map, EnumMap};
 use flume::Sender as FlumeSender;
 use fnv::{FnvHashMap, FnvHashSet};
-
-use crate::{
-    ClientToServerReceiver, ClientToServerSchema, Constants, Factory, Mirroring, Runtime, RuntimeTask, ServerSession,
-    ServerSessionEvent, ServerToClientSchema, ServerToClientSender, Sink, Source,
-};
+use std::net::{SocketAddr, UdpSocket};
 
 pub struct Server
 {
     sessions: FnvHashMap<u64, ServerSession>,
     session_senders: Box<[FlumeSender<ServerSessionEvent>]>,
+    #[allow(unused)]
     runtime: Box<dyn Runtime>,
 }
 
@@ -32,8 +40,8 @@ impl Server
     pub fn builder(session_capacity: usize, runtime: Box<dyn Runtime>) -> ServerBuilder
     {
         ServerBuilder {
-            session_capacity: session_capacity,
-            runtime: runtime,
+            session_capacity,
+            runtime,
 
             ports: FnvHashSet::default(),
             tasks: Vec::new(),
@@ -51,10 +59,7 @@ impl Server
         self.sessions.insert(session_id, session);
         self.session_senders.iter().for_each(|session_sender| {
             session_sender
-                .send(ServerSessionEvent::Connected {
-                    session_id: session_id,
-                    cipher_key: cipher_key,
-                })
+                .send(ServerSessionEvent::Connected { session_id, cipher_key })
                 .unwrap()
         });
     }
@@ -65,7 +70,7 @@ impl Server
 
         self.session_senders.iter().for_each(|session_sender| {
             session_sender
-                .send(ServerSessionEvent::Disconnected { session_id: session_id })
+                .send(ServerSessionEvent::Disconnected { session_id })
                 .unwrap()
         });
         self.sessions.remove(&session_id);

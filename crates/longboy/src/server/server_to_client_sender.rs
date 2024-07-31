@@ -61,16 +61,16 @@ where
         sockets[Mirroring::Voice].set_qos_voice()?;
 
         Ok(Self {
-            name: name,
+            name,
 
-            mapper_socket: mapper_socket,
+            mapper_socket,
 
-            sockets: sockets,
+            sockets,
 
-            session_receiver: session_receiver,
+            session_receiver,
             sessions: Arena::with_capacity(session_capacity),
             session_id_to_session_map: FnvHashMap::with_capacity_and_hasher(session_capacity, Default::default()),
-            source_factory: source_factory,
+            source_factory,
         })
     }
 }

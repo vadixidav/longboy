@@ -27,7 +27,7 @@ impl TokioRuntime
     {
         Self {
             handles: Vec::new(),
-            cancellation_token: cancellation_token,
+            cancellation_token,
         }
     }
 }
@@ -42,7 +42,7 @@ impl Runtime for TokioRuntime
     fn spawn(&mut self, task: Box<dyn RuntimeTask>)
     {
         let task = Task {
-            task: task,
+            task,
             cancellation_token: self.cancellation_token.clone(),
         };
         self.handles.push(tokio::spawn(task.run()));
