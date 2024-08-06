@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use longboy::{Constants, Receiver, Sender, Sink, Source};
+use zerocopy::little_endian::U64;
 
 struct TestSource
 {
@@ -18,25 +19,27 @@ struct TestSink
     handled: Arc<AtomicU64>,
 }
 
-impl<const SIZE: usize> Source<SIZE> for TestSource
+#[derive(FromZeroes, FromBytes, AsBytes)]
+#[repr(packed)]
+struct TestMessage
 {
-    fn poll(&mut self, buffer: &mut [u8; SIZE]) -> bool
+    counter: U64,
+}
+
+impl Source for TestSource
+{
+    type Message = TestMessage;
+    fn poll(&mut self) -> Option<Self::Message>
     {
         self.accumulator += 1;
-        match self.accumulator % self.period == 0
-        {
-            true =>
-            {
-                let counter = self.counter.fetch_add(1, Ordering::Relaxed) + 1;
-                *buffer.first_chunk_mut().unwrap() = u64::to_le_bytes(counter);
-                true
-            }
-            false => false,
-        }
+        (self.accumulator % self.period == 0).then_some(|| {
+            let counter = self.counter.fetch_add(1, Ordering::Relaxed) + 1;
+            TestMessage { counter }
+        })
     }
 }
 
-impl<const SIZE: usize> Sink<SIZE> for TestSink
+impl Sink for TestSink
 {
     fn handle(&mut self, buffer: &[u8; SIZE])
     {

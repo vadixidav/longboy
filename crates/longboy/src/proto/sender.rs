@@ -1,28 +1,34 @@
+use zerocopy::{AsBytes, FromBytes, FromZeroes};
+
 use crate::{Cipher, Constants};
 
-pub struct Sender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
-where
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+#[derive(FromZeroes, FromBytes, AsBytes)]
+#[repr(packed)]
+struct SendDatagram<SourceType: Source, const WINDOW_SIZE: usize>
+{
+    cycle: u16,
+    timestamp: u16,
+    messages: [SourceType::Message; WINDOW_SIZE],
+}
+
+pub trait Source: Send + 'static
+{
+    type Message: FromBytes + AsBytes;
+
+    fn poll(&mut self) -> Option<Self::Message>;
+}
+
+pub struct Sender<SourceType: Source, const WINDOW_SIZE: usize>
 {
     source: SourceType,
-    cipher: Cipher<SIZE>,
+    cipher: Cipher,
 
     cycle: usize,
     flags: [bool; WINDOW_SIZE],
-    buffer: [u8; <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE],
+    datagram: SendDatagram<SourceType, WINDOW_SIZE>,
 }
 
-pub trait Source<const SIZE: usize>
-where
-    Self: 'static + Send,
-{
-    fn poll(&mut self, buffer: &mut [u8; SIZE]) -> bool;
-}
-
-impl<SourceType, const SIZE: usize, const WINDOW_SIZE: usize> Sender<SourceType, SIZE, WINDOW_SIZE>
-where
-    SourceType: Source<SIZE>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+impl<SourceType: Source, const WINDOW_SIZE: usize> Sender<SourceType, WINDOW_SIZE>
 {
     pub fn new(cipher_key: u64, source: SourceType) -> Self
     {
@@ -32,7 +38,11 @@ where
 
             cycle: 0,
             flags: [false; WINDOW_SIZE],
-            buffer: [0; <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE],
+            datagram: SendDatagram {
+                cycle: 0,
+                timestamp: 0,
+                messages: [],
+            },
         }
     }
 

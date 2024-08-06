@@ -20,6 +20,7 @@ use quinn::{
 };
 use rcgen::CertifiedKey;
 use tokio::join;
+use zerocopy::little_endian::{U32, U64};
 
 #[derive(Clone)]
 struct TestRuntime
@@ -142,25 +143,30 @@ impl Factory for TestClientToServerSinkFactory
     }
 }
 
-impl Source<16> for TestClientToServerSource
+#[derive(FromZeroes, FromBytes, AsBytes)]
+#[repr(packed)]
+struct ClientToServer
 {
-    fn poll(&mut self, buffer: &mut [u8; 16]) -> bool
+    frame: U32,
+    player_input: U64,
+}
+
+impl Source for TestClientToServerSource
+{
+    type Message = ClientToServer;
+
+    fn poll(&mut self) -> Option<ClientToServer>
     {
-        match self.channel.try_recv()
-        {
-            Ok((frame, player_input)) =>
-            {
-                *(<&mut [u8; 4]>::try_from(&mut buffer[0..4]).unwrap()) = frame.to_le_bytes();
-                *(<&mut [u8; 8]>::try_from(&mut buffer[4..12]).unwrap()) = player_input.to_le_bytes();
-                true
-            }
-            Err(_) => false,
-        }
+        self.channel
+            .try_recv()
+            .ok()
+            .map(|(frame, player_input)| ClientToServer { frame, player_input })
     }
 }
 
-impl Sink<16> for TestClientToServerSink
+impl Sink for TestClientToServerSink
 {
+    const BUFFER_SIZE: usize = 16;
     fn handle(&mut self, buffer: &[u8; 16])
     {
         let frame = u32::from_le_bytes(*(<&[u8; 4]>::try_from(&buffer[0..4]).unwrap()));
@@ -169,27 +175,28 @@ impl Sink<16> for TestClientToServerSink
     }
 }
 
-impl Source<32> for TestServerToClientSource
+struct ServerToClient
 {
-    fn poll(&mut self, buffer: &mut [u8; 32]) -> bool
+    frame: u32,
+    player_inputs: [u64; 2],
+}
+
+impl Source for TestServerToClientSource
+{
+    type Message = ServerToClient;
+    fn poll(&mut self) -> Option<Self::Message>
     {
-        match self.channel.try_recv()
-        {
-            Ok((frame, player_inputs)) =>
-            {
-                *(<&mut [u8; 4]>::try_from(&mut buffer[0..4]).unwrap()) = frame.to_le_bytes();
-                *(<&mut [u8; 8]>::try_from(&mut buffer[4..12]).unwrap()) = player_inputs[0].to_le_bytes();
-                *(<&mut [u8; 8]>::try_from(&mut buffer[12..20]).unwrap()) = player_inputs[1].to_le_bytes();
-                true
-            }
-            Err(_) => false,
-        }
+        self.channel
+            .try_recv()
+            .ok()
+            .map(|(frame, player_inputs)| ServerToClient { frame, player_inputs })
     }
 }
 
-impl Sink<32> for TestServerToClientSink
+impl Sink for TestServerToClientSink
 {
-    fn handle(&mut self, buffer: &[u8; 32])
+    const BUFFER_SIZE: usize = 32;
+    fn handle(&mut self, buffer: &[u8; Self::BUFFER_SIZE])
     {
         let frame = u32::from_le_bytes(*(<&[u8; 4]>::try_from(&buffer[0..4]).unwrap()));
         let player_input_1 = u64::from_le_bytes(*(<&[u8; 8]>::try_from(&buffer[4..12]).unwrap()));

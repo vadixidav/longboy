@@ -77,7 +77,7 @@ where
         if timestamp >= self.next_heartbeat
         {
             let mut buffer = [0; std::mem::size_of::<u64>()];
-            *<&mut [u8; 8]>::try_from(&mut buffer[0..8]).unwrap() = self.session_id.to_le_bytes();
+            buffer[0..8].copy_from_slice(&self.session_id.to_le_bytes());
 
             self.socket
                 .send_to(&buffer, self.mapper_socket_addr)

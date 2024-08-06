@@ -1,30 +1,32 @@
+use zerocopy::{AsBytes, FromBytes};
+
 use crate::{Cipher, Constants};
 
-pub struct Receiver<SinkType, const SIZE: usize, const WINDOW_SIZE: usize>
-where
-    SinkType: Sink<SIZE>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
+#[derive(FromZeroes, FromBytes, AsBytes)]
+#[repr(packed)]
+struct Datagram<SinkType: Sink, const WINDOW_SIZE: usize>
+{
+    cycle: u16,
+    timestamp: u16,
+    messages: [SinkType::Message; WINDOW_SIZE],
+}
+
+pub struct Receiver<SinkType: Sink, const WINDOW_SIZE: usize>
 {
     sink: SinkType,
-    cipher: Cipher<SIZE>,
+    cipher: Cipher,
 
     cycle: usize,
     flags: [bool; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED],
 }
 
-pub trait Sink<const SIZE: usize>
-where
-    Self: 'static + Send,
+pub trait Sink: Send + 'static
 {
-    fn handle(&mut self, buffer: &[u8; SIZE]);
+    type Message: FromBytes + AsBytes;
+    fn handle(&mut self, message: Self::Message);
 }
 
-impl<SinkType, const SIZE: usize, const WINDOW_SIZE: usize> Receiver<SinkType, SIZE, WINDOW_SIZE>
-where
-    SinkType: Sink<SIZE>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
+impl<SinkType: Sink, const WINDOW_SIZE: usize> Receiver<SinkType, WINDOW_SIZE>
 {
     pub fn new(cipher_key: u64, sink: SinkType) -> Self
     {
@@ -55,10 +57,9 @@ where
         let MAX_BUFFERED: usize = Constants::<SIZE, WINDOW_SIZE>::MAX_BUFFERED;
 
         // Grab cycle and timestamp.
-        self.cipher
-            .decrypt_header(<&mut [u8; 4]>::try_from(&mut datagram[0..4]).unwrap());
-        let datagram_cycle = u16::from_le_bytes(*<&[u8; 2]>::try_from(&datagram[0..2]).unwrap()) as usize;
-        let datagram_timestamp = u16::from_le_bytes(*<&[u8; 2]>::try_from(&datagram[2..4]).unwrap());
+        self.cipher.decrypt_header((&mut datagram[0..4]).try_into().unwrap());
+        let datagram_cycle = u16::from_le_bytes((&datagram[0..2]).try_into().unwrap()) as usize;
+        let datagram_timestamp = u16::from_le_bytes((&datagram[2..4]).try_into().unwrap());
 
         // Calculate diff for cycle and timestamp.
         let cycle_diff = ((datagram_cycle + MAX_CYCLE) - self.cycle) % MAX_CYCLE;
@@ -82,7 +83,6 @@ where
         if cycle_diff > MAX_BUFFERED
         {
             // hard warning
-
             for _ in 0..(cycle_diff - MAX_BUFFERED)
             {
                 let index = self.cycle % MAX_BUFFERED;
@@ -111,12 +111,11 @@ where
             {
                 let start = (std::mem::size_of::<u16>() * 2) + (SIZE * source_index);
                 let end = start + SIZE;
-                if *<&[u8; SIZE]>::try_from(&datagram[start..end]).unwrap() != [0; SIZE]
+                if (&datagram[start..end]).try_into().unwrap() != [0; SIZE]
                 {
                     self.cipher
                         .decrypt_slot(<&mut [u8; SIZE]>::try_from(&mut datagram[start..end]).unwrap());
-                    self.sink
-                        .handle(<&[u8; SIZE]>::try_from(&datagram[start..end]).unwrap());
+                    self.sink.handle((&datagram[start..end]).try_into().unwrap());
                 }
                 self.flags[destination_index] = true;
             }

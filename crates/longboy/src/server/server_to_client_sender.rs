@@ -10,7 +10,7 @@ use crate::{Constants, Factory, Mirroring, RuntimeTask, Sender, ServerSessionEve
 
 pub(crate) struct ServerToClientSender<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
 where
-    SourceFactoryType: Factory<Type: Source<SIZE>>,
+    SourceFactoryType: Factory<Type: Source>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     name: String,
@@ -25,19 +25,19 @@ where
     source_factory: SourceFactoryType,
 }
 
-struct SenderSession<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
+struct SenderSession<SourceType, const WINDOW_SIZE: usize>
 where
-    SourceType: Source<SIZE>,
+    SourceType: Source,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     socket_addr: Option<SocketAddr>,
-    sender: Sender<SourceType, SIZE, WINDOW_SIZE>,
+    sender: Sender<SourceType, WINDOW_SIZE>,
 }
 
 impl<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
     ServerToClientSender<SourceFactoryType, SIZE, WINDOW_SIZE>
 where
-    SourceFactoryType: Factory<Type: Source<SIZE>>,
+    SourceFactoryType: Factory<Type: Source>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     pub(crate) fn new(
@@ -78,7 +78,7 @@ where
 impl<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize> RuntimeTask
     for ServerToClientSender<SourceFactoryType, SIZE, WINDOW_SIZE>
 where
-    SourceFactoryType: Factory<Type: Source<SIZE>>,
+    SourceFactoryType: Factory<Type: Source>,
     [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
 {
     fn name(&self) -> &str
