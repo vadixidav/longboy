@@ -1,5 +1,6 @@
 #![allow(incomplete_features)]
-#![feature(generic_const_items)]
+// #![feature(generic_const_items)]
+#![feature(generic_const_exprs)]
 #![feature(iter_chain)]
 #![feature(let_chains)]
 #![feature(map_try_insert)]

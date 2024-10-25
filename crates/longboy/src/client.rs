@@ -8,11 +8,19 @@ pub use self::client_session::*;
 // Internal
 pub(crate) use self::{client_to_server_sender::*, server_to_client_receiver::*};
 
-use crate::{ClientToServerSchema, Constants, Mirroring, Runtime, RuntimeTask, ServerToClientSchema, Sink, Source};
+use crate::{
+    ClientToServerSchema, Constants, Mirroring, Runtime, RuntimeTask, ServerToClientSchema, Sink, Source, SourceBundle,
+    SourceTypeData,
+};
 use anyhow::{anyhow, Context, Result};
 use enum_map::{enum_map, EnumMap};
 use fnv::FnvHashSet;
-use std::net::{SocketAddr, UdpSocket};
+use generic_array::ArrayLength;
+use std::{
+    net::{SocketAddr, UdpSocket},
+    ops::Shl,
+};
+use typenum::{bit::B1, Double};
 
 pub struct Client
 {
@@ -46,14 +54,9 @@ impl Client
 
 impl ClientBuilder
 {
-    pub fn sender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>(
-        self,
-        schema: &ClientToServerSchema,
-        source: SourceType,
-    ) -> Result<Self>
+    pub fn sender<SourceType, WindowSize>(self, schema: &ClientToServerSchema, source: SourceType) -> Result<Self>
     where
-        SourceType: Source<SIZE>,
-        [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+        SourceTypeData<SourceType, WindowSize>: SourceBundle,
     {
         let sockets = enum_map! {
             Mirroring::AudioVideo => UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], 0))).context(schema.name)?,
@@ -61,18 +64,17 @@ impl ClientBuilder
             Mirroring::Voice => UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], 0))).context(schema.name)?,
         };
 
-        self.sender_with_sockets::<SourceType, SIZE, WINDOW_SIZE>(schema, sockets, source)
+        self.sender_with_sockets::<SourceTypeData<SourceType, WindowSize>>(schema, sockets, source)
     }
 
-    pub fn sender_with_sockets<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>(
+    pub fn sender_with_sockets<SourceType, WindowSize>(
         mut self,
         schema: &ClientToServerSchema,
         sockets: EnumMap<Mirroring, UdpSocket>,
         source: SourceType,
     ) -> Result<Self>
     where
-        SourceType: Source<SIZE>,
-        [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+        SourceTypeData<SourceType, WindowSize>: SourceBundle,
     {
         if !self.ports.insert(schema.mapper_port)
         {
@@ -83,7 +85,7 @@ impl ClientBuilder
             return Err(anyhow!("Reused port {}", schema.port)).context(schema.name);
         }
 
-        let client_to_server_sender = ClientToServerSender::<SourceType, SIZE, WINDOW_SIZE>::new(
+        let client_to_server_sender = ClientToServerSender::<SourceTypeData<SourceType, WindowSize>>::new(
             format!("ClientToServerSender: {}", schema.name),
             SocketAddr::from((self.session.ip_addr(), schema.mapper_port)),
             schema.heartbeat_period,

@@ -1,23 +1,83 @@
+use std::{cmp, marker::PhantomData, mem, ops::Shl};
+
+use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
+use typenum::{bit::B1, Const, Double, Max, Maximum, Unsigned, U8};
 use zerocopy::{AsBytes, FromBytes};
 
-use crate::{Cipher, Constants};
+use crate::Cipher;
 
-#[derive(FromZeroes, FromBytes, AsBytes)]
-#[repr(packed)]
-struct Datagram<SinkType: Sink, const WINDOW_SIZE: usize>
+use super::{calc_datagram_size, calc_max_cycle, Datagram, DatagramBundle, DatagramTypeData};
+
+pub trait SinkBundle
 {
-    cycle: u16,
-    timestamp: u16,
-    messages: [SinkType::Message; WINDOW_SIZE],
+    type Sink: Sink;
+    type WindowSize: ArrayLength;
+    type NumBuffered: ArrayLength;
+    type DatagramSize: ArrayLength;
+    type DatagramData: DatagramBundle;
+    type MessageSize: ArrayLength;
+
+    fn max_cycle() -> usize
+    {
+        <Self::DatagramData as DatagramBundle>::MaxCycle::USIZE
+    }
+
+    fn num_buffered() -> usize
+    {
+        Self::NumBuffered::USIZE
+    }
+
+    fn window_size() -> usize
+    {
+        Self::WindowSize::USIZE
+    }
+
+    fn message_size() -> usize
+    {
+        Self::MessageSize::USIZE
+    }
 }
 
-pub struct Receiver<SinkType: Sink, const WINDOW_SIZE: usize>
+pub struct SinkTypeData<SinkType, DatagramData>
 {
-    sink: SinkType,
-    cipher: Cipher,
+    _phantom: (PhantomData<SinkType>, PhantomData<DatagramData>),
+}
+
+const fn calc_num_buffered<WindowSize: ArrayLength>() -> usize
+{
+    let double_window = 2 * WindowSize::USIZE;
+    if double_window < 8
+    {
+        8
+    }
+    else
+    {
+        double_window
+    }
+}
+
+impl<SinkType: Sink, DatagramData: DatagramBundle> SinkBundle for SinkTypeData<SinkType, DatagramData>
+where
+    Const<{ calc_datagram_size::<DatagramData>() }>: ArrayLength,
+    Const<{ calc_max_cycle::<DatagramData::WindowSize>() }>: ArrayLength,
+    Const<{ calc_num_buffered::<DatagramData::WindowSize>() }>: ArrayLength,
+    Const<{ mem::size_of::<SinkType::Message>() }>: ArrayLength,
+{
+    type Sink = SinkType;
+    type WindowSize = DatagramData::WindowSize;
+    type NumBuffered = Const<{ calc_num_buffered::<DatagramData::WindowSize>() }>;
+    type DatagramSize = Const<{ calc_datagram_size::<DatagramData>() }>;
+    type DatagramData = DatagramTypeData<SinkType::Message, DatagramData::WindowSize>;
+    type MessageSize = Const<{ mem::size_of::<SinkType::Message>() }>;
+}
+
+pub struct Receiver<SinkData: SinkBundle>
+{
+    sink: SinkData::Sink,
+    cipher: Cipher<SinkData::MessageSize>,
 
     cycle: usize,
-    flags: [bool; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED],
+    flags: GenericArray<bool, SinkData::NumBuffered>,
 }
 
 pub trait Sink: Send + 'static
@@ -26,16 +86,16 @@ pub trait Sink: Send + 'static
     fn handle(&mut self, message: Self::Message);
 }
 
-impl<SinkType: Sink, const WINDOW_SIZE: usize> Receiver<SinkType, WINDOW_SIZE>
+impl<SinkData: SinkBundle> Receiver<SinkData>
 {
-    pub fn new(cipher_key: u64, sink: SinkType) -> Self
+    pub fn new(cipher_key: u64, sink: SinkData::Sink) -> Self
     {
         Self {
             sink,
             cipher: Cipher::new(cipher_key),
 
             cycle: 0,
-            flags: [false; <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED],
+            flags: GenericArray::generate(|_| false),
         }
     }
 
@@ -44,26 +104,14 @@ impl<SinkType: Sink, const WINDOW_SIZE: usize> Receiver<SinkType, WINDOW_SIZE>
         self.cycle
     }
 
-    pub fn handle_datagram(
-        &mut self,
-        timestamp: u16,
-        datagram: &mut [u8; <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE],
-    )
+    pub fn handle_datagram(&mut self, timestamp: u16, datagram: Datagram<SinkData::DatagramData>)
     {
-        // Alias constants so they're less painful to read.
-        #[allow(non_snake_case)]
-        let MAX_CYCLE: usize = Constants::<SIZE, WINDOW_SIZE>::MAX_CYCLE;
-        #[allow(non_snake_case)]
-        let MAX_BUFFERED: usize = Constants::<SIZE, WINDOW_SIZE>::MAX_BUFFERED;
-
         // Grab cycle and timestamp.
-        self.cipher.decrypt_header((&mut datagram[0..4]).try_into().unwrap());
-        let datagram_cycle = u16::from_le_bytes((&datagram[0..2]).try_into().unwrap()) as usize;
-        let datagram_timestamp = u16::from_le_bytes((&datagram[2..4]).try_into().unwrap());
+        self.cipher.decrypt_header(self.datagram.header.as_bytes_mut());
 
         // Calculate diff for cycle and timestamp.
-        let cycle_diff = ((datagram_cycle + MAX_CYCLE) - self.cycle) % MAX_CYCLE;
-        let timestamp_diff = ((datagram_timestamp + u16::MAX) - timestamp) % u16::MAX;
+        let cycle_diff = ((datagram.cycle as usize + SinkData::max_cycle()) - self.cycle) % SinkData::max_cycle();
+        let timestamp_diff = ((datagram.timestamp + u16::MAX) - timestamp) % u16::MAX;
 
         // Check for bad datagrams or late datagrams that are already processed.  Because
         // we ensure only a positive diff, this is done by checking for any values greater
@@ -76,45 +124,46 @@ impl<SinkType: Sink, const WINDOW_SIZE: usize> Receiver<SinkType, WINDOW_SIZE>
 
         // Check for late or missing packets from between local cycle and the datagram
         // cycle just received.
-        if cycle_diff > std::cmp::min(8, WINDOW_SIZE + 1)
+        if cycle_diff > std::cmp::min(8, SinkData::window_size() + 1)
         {
             // soft warning
         }
-        if cycle_diff > MAX_BUFFERED
+        if cycle_diff > SinkData::num_buffered()
         {
             // hard warning
-            for _ in 0..(cycle_diff - MAX_BUFFERED)
+            for _ in 0..(cycle_diff - SinkData::num_buffered())
             {
-                let index = self.cycle % MAX_BUFFERED;
+                let index = self.cycle % SinkData::num_buffered();
                 self.flags[index] = false;
-                self.cycle = (self.cycle + 1) % MAX_CYCLE;
+                self.cycle = (self.cycle + 1) % SinkData::max_cycle();
             }
         }
 
         // Sink input.
-        for i in 0..WINDOW_SIZE
+        for i in 0..SinkData::window_size()
         {
-            let cycle_i = ((datagram_cycle + MAX_CYCLE) - i) % MAX_CYCLE;
+            let cycle_i = ((datagram.cycle + SinkData::max_cycle()) - i) % SinkData::max_cycle();
 
             // If we're before local cycle, early out.  This is effectively checking for distance
             // being out of the buffer's size, which is only possible if before because we've
             // already adanced the local cycle to catch up, if applicable.
-            if ((cycle_i + MAX_CYCLE) - self.cycle) % MAX_CYCLE > MAX_BUFFERED
+            if ((cycle_i + SinkData::max_cycle()) - self.cycle) % SinkData::max_cycle() > SinkData::num_buffered()
             {
                 break;
             }
 
-            let source_index = cycle_i % WINDOW_SIZE;
-            let destination_index = cycle_i % MAX_BUFFERED;
+            let source_index = cycle_i % SinkData::window_size();
+            let destination_index = cycle_i % SinkData::num_buffered();
 
             if !self.flags[destination_index]
             {
-                let start = (std::mem::size_of::<u16>() * 2) + (SIZE * source_index);
-                let end = start + SIZE;
-                if (&datagram[start..end]).try_into().unwrap() != [0; SIZE]
+                let start = (std::mem::size_of::<u16>() * 2) + (SinkData::message_size() * source_index);
+                let end = start + SinkData::message_size();
+                if (&datagram[start..end]).try_into().unwrap() != [0; SinkData::message_size()]
                 {
-                    self.cipher
-                        .decrypt_slot(<&mut [u8; SIZE]>::try_from(&mut datagram[start..end]).unwrap());
+                    self.cipher.decrypt_slot(
+                        <&mut [u8; SinkData::message_size()]>::try_from(&mut datagram[start..end]).unwrap(),
+                    );
                     self.sink.handle((&datagram[start..end]).try_into().unwrap());
                 }
                 self.flags[destination_index] = true;
@@ -124,13 +173,13 @@ impl<SinkType: Sink, const WINDOW_SIZE: usize> Receiver<SinkType, WINDOW_SIZE>
         // Advance cycles.
         loop
         {
-            let index = self.cycle % MAX_BUFFERED;
+            let index = self.cycle % SinkData::num_buffered();
             if !self.flags[index]
             {
                 break;
             }
             self.flags[index] = false;
-            self.cycle = (self.cycle + 1) % MAX_CYCLE;
+            self.cycle = (self.cycle + 1) % SinkData::max_cycle();
         }
     }
 }

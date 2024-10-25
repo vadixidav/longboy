@@ -1,17 +1,23 @@
 use cipher::{
-    array::Array,
+    array::ArraySize,
     typenum::{U20, U8},
-    BlockCipherDecrypt, BlockCipherEncrypt,
+    Block, BlockCipherDecrypt, BlockCipherEncrypt, BlockSizeUser, KeyInit,
 };
 use rc5::RC5;
+use typenum::{IsLess, NonZero, U256};
+use zerocopy::{AsBytes, FromBytes};
 
-pub(crate) struct Cipher
+use super::DatagramHeader;
+
+pub(crate) struct Cipher<MessageSize>
 {
     header_cipher: RC5<u16, U20, U8>,
-    slot_cipher: RC5<u32, U20, U8>,
+    slot_cipher: RC5<u16, U20, MessageSize>,
 }
 
-impl Cipher
+impl<MessageSize> Cipher<MessageSize>
+where
+    MessageSize: ArraySize + IsLess<U256> + NonZero,
 {
     pub(crate) fn new(key: u64) -> Self
     {
@@ -21,25 +27,43 @@ impl Cipher
         }
     }
 
-    pub(crate) fn encrypt_header(&self, block: &mut [u8; 4])
+    pub(crate) fn encrypt_header(&self, header: &mut DatagramHeader)
     {
-        self.header_cipher.encrypt_block(block.as_mut())
+        self.header_cipher.encrypt_block(
+            header
+                .as_bytes_mut()
+                .try_into()
+                .expect("datagram header was a different size than expected by cipher"),
+        );
     }
 
-    pub(crate) fn decrypt_header(&self, block: &mut [u8; 4])
+    pub(crate) fn decrypt_header(&self, header: &mut DatagramHeader)
     {
-        self.header_cipher.decrypt_block(block.as_mut())
+        self.header_cipher.decrypt_block(
+            header
+                .as_bytes_mut()
+                .try_into()
+                .expect("datagram header was a different size than expected by cipher"),
+        );
     }
 
-    pub(crate) fn encrypt_slot<const BLOCK_SIZE: usize>(&self, block: &mut [u8; BLOCK_SIZE])
+    pub(crate) fn encrypt_slot<T: AsBytes + FromBytes>(&self, message: &mut T)
     {
-        self.slot_cipher
-            .encrypt_blocks(Array::cast_slice_from_core_mut(block.as_chunks_mut().0))
+        self.slot_cipher.encrypt_block(
+            message
+                .as_bytes_mut()
+                .try_into()
+                .expect("message was a different size than expected by cipher"),
+        );
     }
 
-    pub(crate) fn decrypt_slot<const BLOCK_SIZE: usize>(&self, block: &mut [u8; BLOCK_SIZE])
+    pub(crate) fn decrypt_slot<T: AsBytes + FromBytes>(&self, message: &mut T)
     {
-        self.slot_cipher
-            .decrypt_blocks(Array::cast_slice_from_core_mut(block.as_chunks_mut().0))
+        self.slot_cipher.decrypt_block(
+            message
+                .as_bytes_mut()
+                .try_into()
+                .expect("message was a different size than expected by cipher"),
+        );
     }
 }

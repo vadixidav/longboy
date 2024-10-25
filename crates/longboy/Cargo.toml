@@ -13,16 +13,18 @@ path = "tests/lib.rs"
 
 [dependencies]
 anyhow = "1.0.86"
-cipher = "=0.5.0-pre.6"
+cipher = "=0.5.0-pre.7"
 derive_builder = { version = "0.20.0", features = ["clippy"] }
 enum-map = "2.7.3"
 flume = "0.11.0"
 fnv = "1.0.7"
+generic-array = "1.1.0"
 quinn = "0.11.2"
-rc5 = { git = "https://github.com/RustCrypto/block-ciphers.git" }
+rc5 = { git = "https://github.com/RustCrypto/block-ciphers.git", rev = "0ce5b88511d7e63666d1a2be2404e6ee15444f6b" }
 thunderdome = "0.6.1"
 tokio = { version = "1.38.1", features = ["full"] }
 tokio-util = "0.7.11"
+typenum = { version = "1.17.0", features = ["const-generics"] }
 zerocopy = { version = "0.7.35", features = ["derive"] }
 
 [dev-dependencies]

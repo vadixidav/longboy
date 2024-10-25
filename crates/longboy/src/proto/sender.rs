@@ -1,14 +1,55 @@
+use std::{marker::PhantomData, mem};
+
+use generic_array::{ArrayLength, GenericArray};
+use typenum::{Const, Unsigned};
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
-use crate::{Cipher, Constants};
+use crate::Cipher;
 
-#[derive(FromZeroes, FromBytes, AsBytes)]
-#[repr(packed)]
-struct SendDatagram<SourceType: Source, const WINDOW_SIZE: usize>
+use super::{Datagram, DatagramBundle, DatagramTypeData};
+
+pub trait SourceBundle
 {
-    cycle: u16,
-    timestamp: u16,
-    messages: [SourceType::Message; WINDOW_SIZE],
+    type Source: Source;
+    type WindowSize: ArrayLength;
+    type DatagramSize: ArrayLength;
+    type DatagramData: DatagramBundle;
+    type MessageSize: ArrayLength;
+
+    fn max_cycle() -> usize
+    {
+        <Self::DatagramData as DatagramBundle>::MaxCycle::USIZE
+    }
+
+    fn window_size() -> usize
+    {
+        Self::WindowSize::USIZE
+    }
+
+    fn message_size() -> usize
+    {
+        Self::MessageSize::USIZE
+    }
+}
+
+pub struct SourceTypeData<SourceType, WindowSize>
+{
+    _phantom: (PhantomData<SourceType>, PhantomData<WindowSize>),
+}
+
+impl<SourceType, WindowSize> SourceBundle for SourceTypeData<SourceType, WindowSize>
+where
+    SourceType: Source,
+    Const<{ u16::MAX as usize / WindowSize::USIZE * WindowSize::USIZE }>: ArrayLength,
+    WindowSize: ArrayLength,
+    Const<{ calc_num_buffered::<WindowSize>() }>: ArrayLength,
+    Const<{ mem::size_of::<SourceType::Message>() }>: ArrayLength,
+{
+    type Source = SourceType;
+    type WindowSize = WindowSize;
+    type DatagramSize = Const<{ u16::MAX as usize / WindowSize::USIZE * WindowSize::USIZE }>;
+    type DatagramData = DatagramTypeData<SinkType::Message, WindowSize>;
+    type MessageSize = Const<{ mem::size_of::<SinkType::Message>() }>;
 }
 
 pub trait Source: Send + 'static
@@ -18,31 +59,27 @@ pub trait Source: Send + 'static
     fn poll(&mut self) -> Option<Self::Message>;
 }
 
-pub struct Sender<SourceType: Source, const WINDOW_SIZE: usize>
+pub struct Sender<SourceData: SourceBundle>
 {
-    source: SourceType,
-    cipher: Cipher,
+    source: SourceData::Source,
+    cipher: Cipher<SourceData::MessageSize>,
 
-    cycle: usize,
-    flags: [bool; WINDOW_SIZE],
-    datagram: SendDatagram<SourceType, WINDOW_SIZE>,
+    cycle: u16,
+    flags: GenericArray<bool, SourceData::WindowSize>,
+    datagram: Datagram<SourceData::DatagramData>,
 }
 
-impl<SourceType: Source, const WINDOW_SIZE: usize> Sender<SourceType, WINDOW_SIZE>
+impl<SourceData: SourceBundle> Sender<SourceData>
 {
-    pub fn new(cipher_key: u64, source: SourceType) -> Self
+    pub fn new(cipher_key: u64, source: SourceData::Source) -> Self
     {
         Self {
             source,
             cipher: Cipher::new(cipher_key),
 
             cycle: 0,
-            flags: [false; WINDOW_SIZE],
-            datagram: SendDatagram {
-                cycle: 0,
-                timestamp: 0,
-                messages: [],
-            },
+            flags: GenericArray::generate(|_| false),
+            datagram: SourceData::DatagramData::new_zeroed(),
         }
     }
 
@@ -51,37 +88,29 @@ impl<SourceType: Source, const WINDOW_SIZE: usize> Sender<SourceType, WINDOW_SIZ
         self.cycle
     }
 
-    pub fn poll_datagram(&mut self, timestamp: u16) -> Option<&[u8; <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]>
+    pub fn poll_datagram(&mut self, timestamp: u16) -> Option<&Datagram<SourceData::DatagramData>>
     {
-        // Alias constants so they're less painful to read.
-        #[allow(non_snake_case)]
-        let MAX_CYCLE: usize = Constants::<SIZE, WINDOW_SIZE>::MAX_CYCLE;
-
         // Record cycle and timestamp.
-        *<&mut [u8; 2]>::try_from(&mut self.buffer[0..2]).unwrap() = (self.cycle as u16).to_le_bytes();
-        *<&mut [u8; 2]>::try_from(&mut self.buffer[2..4]).unwrap() = timestamp.to_le_bytes();
+        self.datagram.cycle = self.cycle;
+        self.datagram.timestamp = timestamp;
         self.cipher
             .encrypt_header(<&mut [u8; 4]>::try_from(&mut self.buffer[0..4]).unwrap());
 
         // Poll source.
-        let index = self.cycle % WINDOW_SIZE;
-        let start = (std::mem::size_of::<u16>() * 2) + (SIZE * index);
-        let end = start + SIZE;
-        match self
-            .source
-            .poll(<&mut [u8; SIZE]>::try_from(&mut self.buffer[start..end]).unwrap())
+        let index = self.cycle % SourceData::window_size();
+        let start = (std::mem::size_of::<u16>() * 2) + (SourceData::message_size() * index);
+        let end = start + SourceData::message_size();
+        if let Some(message) = self.source.poll()
         {
-            true =>
-            {
-                self.cipher
-                    .encrypt_slot(<&mut [u8; SIZE]>::try_from(&mut self.buffer[start..end]).unwrap());
-                self.flags[index] = true;
-            }
-            false =>
-            {
-                self.buffer[start..end].fill(0);
-                self.flags[index] = false;
-            }
+            self.datagram.messages[index] = message;
+            self.cipher.encrypt_slot(&mut self.datagram.messages[index]);
+            self.flags[index] = true;
+        }
+        else
+        {
+            self.buffer[start..end].fill(0);
+            self.datagram.messages[index].zero();
+            self.flags[index] = false;
         }
 
         // Check for transmit and potentially advance cycle.
@@ -89,7 +118,7 @@ impl<SourceType: Source, const WINDOW_SIZE: usize> Sender<SourceType, WINDOW_SIZ
         {
             true =>
             {
-                self.cycle = (self.cycle + 1) % MAX_CYCLE;
+                self.cycle = self.cycle.wrapping_add(1) % SourceData::max_cycle();
                 Some(&self.buffer)
             }
             false => None,
