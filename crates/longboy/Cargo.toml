@@ -12,20 +12,20 @@ name = "tests"
 path = "tests/lib.rs"
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.93"
 cipher = "=0.5.0-pre.7"
-derive_builder = { version = "0.20.0", features = ["clippy"] }
+derive_builder = { version = "0.20.2", features = ["clippy"] }
 enum-map = "2.7.3"
-flume = "0.11.0"
+flume = "0.11.1"
 fnv = "1.0.7"
 generic-array = "1.1.0"
-quinn = "0.11.2"
-rc5 = { git = "https://github.com/RustCrypto/block-ciphers.git", rev = "0ce5b88511d7e63666d1a2be2404e6ee15444f6b" }
+quinn = "0.11.6"
+rc5 = { git = "https://github.com/RustCrypto/block-ciphers.git", rev = "4da9b802de52a3326fdc74d559caddd57042fed2" }
 thunderdome = "0.6.1"
-tokio = { version = "1.38.1", features = ["full"] }
-tokio-util = "0.7.11"
+tokio = { version = "1.41.1", features = ["full"] }
+tokio-util = "0.7.12"
 typenum = { version = "1.17.0", features = ["const-generics"] }
-zerocopy = { version = "0.7.35", features = ["derive"] }
+zerocopy = { version = "0.8.10", features = ["derive"] }
 
 [dev-dependencies]
 parking_lot = "0.12.3"

@@ -2,12 +2,11 @@ use std::net::{SocketAddr, UdpSocket};
 
 use anyhow::Result;
 use enum_map::{Enum, EnumMap};
+use zerocopy::IntoBytes;
 
-use crate::{Constants, Mirroring, RuntimeTask, Sender, Source, UdpSocketExt};
+use crate::{Constants, Mirroring, RuntimeTask, Sender, Source, SourceBundle, UdpSocketExt};
 
-pub(crate) struct ClientToServerSender<SourceType, const SIZE: usize, const WINDOW_SIZE: usize>
-where
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+pub(crate) struct ClientToServerSender<SourceData: SourceBundle>
 {
     name: String,
 
@@ -19,13 +18,10 @@ where
 
     session_id: u64,
     next_heartbeat: u16,
-    sender: Sender<SourceType, SIZE, WINDOW_SIZE>,
+    sender: Sender<SourceData>,
 }
 
-impl<SourceType, const SIZE: usize, const WINDOW_SIZE: usize> ClientToServerSender<SourceType, SIZE, WINDOW_SIZE>
-where
-    SourceType: Source<SIZE>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+impl<SourceData: SourceBundle> ClientToServerSender<SourceData>
 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -36,7 +32,7 @@ where
         session_id: u64,
         cipher_key: u64,
         sockets: EnumMap<Mirroring, UdpSocket>,
-        source: SourceType,
+        source: SourceData::Source,
     ) -> Result<Self>
     {
         sockets[Mirroring::AudioVideo].set_nonblocking(true)?;
@@ -64,11 +60,7 @@ where
     }
 }
 
-impl<SourceType, const SIZE: usize, const WINDOW_SIZE: usize> RuntimeTask
-    for ClientToServerSender<SourceType, SIZE, WINDOW_SIZE>
-where
-    SourceType: Source<SIZE>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+impl<SourceData: SourceBundle> RuntimeTask for ClientToServerSender<SourceData>
 {
     fn name(&self) -> &str
     {
@@ -99,7 +91,9 @@ where
         {
             for socket in self.sockets.values()
             {
-                socket.send_to(datagram, self.socket_addr).expect("send_to failure");
+                socket
+                    .send_to(datagram.as_bytes(), self.socket_addr)
+                    .expect("send_to failure");
             }
         }
     }

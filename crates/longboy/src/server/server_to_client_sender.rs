@@ -6,12 +6,9 @@ use flume::Receiver as FlumeReceiver;
 use fnv::FnvHashMap;
 use thunderdome::{Arena, Index};
 
-use crate::{Constants, Factory, Mirroring, RuntimeTask, Sender, ServerSessionEvent, Source, UdpSocketExt};
+use crate::{Factory, Mirroring, RuntimeTask, Sender, ServerSessionEvent, SourceBundle, UdpSocketExt};
 
-pub(crate) struct ServerToClientSender<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
-where
-    SourceFactoryType: Factory<Type: Source>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+pub(crate) struct ServerToClientSender<SourceData: SourceBundle, SourceFactory: Factory<Type = SourceData::Source>>
 {
     name: String,
 
@@ -20,25 +17,19 @@ where
     sockets: EnumMap<Mirroring, UdpSocket>,
 
     session_receiver: FlumeReceiver<ServerSessionEvent>,
-    sessions: Arena<SenderSession<SourceFactoryType::Type, SIZE, WINDOW_SIZE>>,
+    sessions: Arena<SenderSession<SourceData>>,
     session_id_to_session_map: FnvHashMap<u64, Index>,
-    source_factory: SourceFactoryType,
+    source_factory: SourceFactory,
 }
 
-struct SenderSession<SourceType, const WINDOW_SIZE: usize>
-where
-    SourceType: Source,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+struct SenderSession<SourceData: SourceBundle>
 {
     socket_addr: Option<SocketAddr>,
-    sender: Sender<SourceType, WINDOW_SIZE>,
+    sender: Sender<SourceData>,
 }
 
-impl<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
-    ServerToClientSender<SourceFactoryType, SIZE, WINDOW_SIZE>
-where
-    SourceFactoryType: Factory<Type: Source>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+impl<SourceData: SourceBundle, SourceFactory: Factory<Type = SourceData::Source>>
+    ServerToClientSender<SourceData, SourceFactory>
 {
     pub(crate) fn new(
         name: String,
@@ -46,7 +37,7 @@ where
         sockets: EnumMap<Mirroring, UdpSocket>,
         session_capacity: usize,
         session_receiver: FlumeReceiver<ServerSessionEvent>,
-        source_factory: SourceFactoryType,
+        source_factory: SourceFactory,
     ) -> Result<Self>
     {
         mapper_socket.set_nonblocking(true)?;
@@ -75,11 +66,8 @@ where
     }
 }
 
-impl<SourceFactoryType, const SIZE: usize, const WINDOW_SIZE: usize> RuntimeTask
-    for ServerToClientSender<SourceFactoryType, SIZE, WINDOW_SIZE>
-where
-    SourceFactoryType: Factory<Type: Source>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
+impl<SourceData: SourceBundle, SourceFactory: Factory<Type = SourceData::Source>> RuntimeTask
+    for ServerToClientSender<SourceData, SourceFactory>
 {
     fn name(&self) -> &str
     {

@@ -2,19 +2,19 @@ use std::{marker::PhantomData, mem};
 
 use generic_array::{ArrayLength, GenericArray};
 use typenum::{Const, Unsigned};
-use zerocopy::{AsBytes, FromBytes, FromZeroes};
+use zerocopy::{FromBytes, FromZeros, IntoBytes};
 
 use crate::Cipher;
 
-use super::{Datagram, DatagramBundle, DatagramTypeData};
+use super::{calc_max_cycle, calc_num_buffered, Datagram, DatagramBundle, DatagramTypeData};
 
-pub trait SourceBundle
+pub trait SourceBundle: 'static
 {
     type Source: Source;
     type WindowSize: ArrayLength;
     type DatagramSize: ArrayLength;
     type DatagramData: DatagramBundle;
-    type MessageSize: ArrayLength;
+    type MessageSize: Send + ArrayLength;
 
     fn max_cycle() -> usize
     {
@@ -44,17 +44,18 @@ where
     WindowSize: ArrayLength,
     Const<{ calc_num_buffered::<WindowSize>() }>: ArrayLength,
     Const<{ mem::size_of::<SourceType::Message>() }>: ArrayLength,
+    Const<{ calc_max_cycle::<WindowSize>() }>: ArrayLength,
 {
     type Source = SourceType;
     type WindowSize = WindowSize;
     type DatagramSize = Const<{ u16::MAX as usize / WindowSize::USIZE * WindowSize::USIZE }>;
-    type DatagramData = DatagramTypeData<SinkType::Message, WindowSize>;
-    type MessageSize = Const<{ mem::size_of::<SinkType::Message>() }>;
+    type DatagramData = DatagramTypeData<SourceType::Message, WindowSize>;
+    type MessageSize = Const<{ mem::size_of::<SourceType::Message>() }>;
 }
 
 pub trait Source: Send + 'static
 {
-    type Message: FromBytes + AsBytes;
+    type Message: Send + FromBytes + IntoBytes;
 
     fn poll(&mut self) -> Option<Self::Message>;
 }

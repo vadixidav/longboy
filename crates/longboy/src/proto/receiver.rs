@@ -1,12 +1,12 @@
-use std::{cmp, marker::PhantomData, mem, ops::Shl};
+use std::{marker::PhantomData, mem};
 
 use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
-use typenum::{bit::B1, Const, Double, Max, Maximum, Unsigned, U8};
-use zerocopy::{AsBytes, FromBytes};
+use typenum::{Const, Unsigned};
+use zerocopy::{FromBytes, IntoBytes};
 
 use crate::Cipher;
 
-use super::{calc_datagram_size, calc_max_cycle, Datagram, DatagramBundle, DatagramTypeData};
+use super::{calc_datagram_size, calc_max_cycle, calc_num_buffered, Datagram, DatagramBundle, DatagramTypeData};
 
 pub trait SinkBundle
 {
@@ -43,19 +43,6 @@ pub struct SinkTypeData<SinkType, DatagramData>
     _phantom: (PhantomData<SinkType>, PhantomData<DatagramData>),
 }
 
-const fn calc_num_buffered<WindowSize: ArrayLength>() -> usize
-{
-    let double_window = 2 * WindowSize::USIZE;
-    if double_window < 8
-    {
-        8
-    }
-    else
-    {
-        double_window
-    }
-}
-
 impl<SinkType: Sink, DatagramData: DatagramBundle> SinkBundle for SinkTypeData<SinkType, DatagramData>
 where
     Const<{ calc_datagram_size::<DatagramData>() }>: ArrayLength,
@@ -82,7 +69,7 @@ pub struct Receiver<SinkData: SinkBundle>
 
 pub trait Sink: Send + 'static
 {
-    type Message: FromBytes + AsBytes;
+    type Message: Send + FromBytes + IntoBytes;
     fn handle(&mut self, message: Self::Message);
 }
 

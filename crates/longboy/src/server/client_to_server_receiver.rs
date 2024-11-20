@@ -6,13 +6,9 @@ use flume::Receiver as FlumeReceiver;
 use fnv::FnvHashMap;
 use thunderdome::{Arena, Index};
 
-use crate::{Constants, Factory, Mirroring, Receiver, RuntimeTask, ServerSessionEvent, Sink};
+use crate::{Constants, Factory, Mirroring, Receiver, RuntimeTask, ServerSessionEvent, Sink, SinkBundle};
 
-pub(crate) struct ClientToServerReceiver<SinkFactoryType, const SIZE: usize, const WINDOW_SIZE: usize>
-where
-    SinkFactoryType: Factory<Type: Sink<SIZE>>,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::DATAGRAM_SIZE]:,
-    [(); <Constants<SIZE, WINDOW_SIZE>>::MAX_BUFFERED]:,
+pub(crate) struct ClientToServerReceiver<SinkData: SinkBundle, SinkFactory: Factory<Type = SinkData::Sink>>
 {
     name: String,
 
@@ -24,7 +20,7 @@ where
     sessions: Arena<ReceiverSession<SinkFactoryType::Type, SIZE, WINDOW_SIZE>>,
     session_id_to_session_map: FnvHashMap<u64, Index>,
     socket_addr_to_session_map: FnvHashMap<SocketAddr, Index>,
-    sink_factory: SinkFactoryType,
+    sink_factory: SinkFactory,
 }
 
 struct ReceiverSession<SinkType, const SIZE: usize, const WINDOW_SIZE: usize>

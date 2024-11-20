@@ -4,7 +4,7 @@ use std::{marker::PhantomData, mem};
 
 use generic_array::{ArrayLength, GenericArray};
 use typenum::{Const, Unsigned};
-use zerocopy::{AsBytes, FromBytes, FromZeroes};
+use zerocopy::{FromBytes, IntoBytes};
 
 pub use self::constants::*;
 
@@ -14,7 +14,7 @@ pub use self::sender::*;
 mod receiver;
 pub use self::receiver::*;
 
-#[derive(FromZeroes, FromBytes, AsBytes)]
+#[derive(FromBytes, IntoBytes)]
 #[repr(packed)]
 pub(crate) struct DatagramHeader
 {
@@ -22,7 +22,7 @@ pub(crate) struct DatagramHeader
     timestamp: u16,
 }
 
-#[derive(FromZeroes, FromBytes, AsBytes)]
+#[derive(FromBytes, IntoBytes)]
 #[repr(packed)]
 pub(crate) struct Datagram<DatagramData: DatagramBundle>
 {
@@ -32,7 +32,7 @@ pub(crate) struct Datagram<DatagramData: DatagramBundle>
 
 pub trait DatagramBundle
 {
-    type Message: FromBytes + AsBytes;
+    type Message: Send + FromBytes + IntoBytes;
     type WindowSize: ArrayLength;
     /// This is the number of bytes used for the maximum number of copies of
     /// messages permitted
@@ -54,9 +54,22 @@ pub const fn calc_datagram_size<DatagramData: DatagramBundle>() -> usize
     mem::size_of::<Datagram<DatagramData>>()
 }
 
+pub const fn calc_num_buffered<WindowSize: ArrayLength>() -> usize
+{
+    let double_window = 2 * WindowSize::USIZE;
+    if double_window < 8
+    {
+        8
+    }
+    else
+    {
+        double_window
+    }
+}
+
 impl<Message, WindowSize> DatagramBundle for DatagramTypeData<Message, WindowSize>
 where
-    Message: FromBytes + AsBytes,
+    Message: Send + FromBytes + IntoBytes,
     WindowSize: ArrayLength,
     Const<{ calc_max_cycle::<WindowSize>() }>: ArrayLength,
 {
